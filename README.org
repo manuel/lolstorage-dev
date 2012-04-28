@@ -1,3 +1,4 @@
+#+TITLE: Lolstorage: Towards Decentralized Social Networking
 #+OPTIONS: num:nil toc:1 creator:nil author:nil
 
 * Contact

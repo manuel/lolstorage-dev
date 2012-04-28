@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+               "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+lang="en" xml:lang="en">
+<head>
+<title>Lolstorage: Towards Decentralized Social Networking</title>
+<meta http-equiv="Content-Type" content="text/html;charset=iso-8859-1"/>
+<meta name="generator" content="Org-mode"/>
+<meta name="generated" content="2012-04-28 18:27:46 CEST"/>
+<meta name="author" content="m"/>
+<meta name="description" content=""/>
+<meta name="keywords" content=""/>
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  html { font-family: Times, serif; font-size: 12pt; }
+  .title  { text-align: center; }
+  .todo   { color: red; }
+  .done   { color: green; }
+  .tag    { background-color: #add8e6; font-weight:normal }
+  .target { }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  p.verse { margin-left: 3% }
+  pre {
+	border: 1pt solid #AEBDCC;
+	background-color: #F3F5F7;
+	padding: 5pt;
+	font-family: courier, monospace;
+        font-size: 90%;
+        overflow:auto;
+  }
+  table { border-collapse: collapse; }
+  td, th { vertical-align: top; }
+  dt { font-weight: bold; }
+  div.figure { padding: 0.5em; }
+  div.figure p { text-align: center; }
+  .linenr { font-size:smaller }
+  .code-highlighted {background-color:#ffff00;}
+  .org-info-js_info-navigation { border-style:none; }
+  #org-info-js_console-label { font-size:10px; font-weight:bold;
+                               white-space:nowrap; }
+  .org-info-js_search-highlight {background-color:#ffff00; color:#000000;
+                                 font-weight:bold; }
+  /*]]>*/-->
+</style>
+<script type="text/javascript">
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+
+<h1 class="title">Lolstorage: Towards Decentralized Social Networking</h1>
+
+
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">Contact </a></li>
+<li><a href="#sec-2">Introduction </a></li>
+<li><a href="#sec-3">Blobs </a></li>
+<li><a href="#sec-4">Trees </a></li>
+<li><a href="#sec-5">Commits </a></li>
+<li><a href="#sec-6">Reflist </a></li>
+<li><a href="#sec-7">Hashes </a></li>
+<li><a href="#sec-8">RemoteStorage </a></li>
+<li><a href="#sec-9">Issues </a></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-1" class="outline-2">
+<h2 id="sec-1">Contact </h2>
+<div class="outline-text-2" id="text-1">
+
+
+<p>
+Manuel Simoni &lt;msimoni@gmail.com&gt;
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-2" class="outline-2">
+<h2 id="sec-2">Introduction </h2>
+<div class="outline-text-2" id="text-2">
+
+
+<p>
+Lolstorage is an attempt to exchange filesystem-like data over
+Unhosted <a href="http://www.w3.org/community/unhosted/wiki/RemoteStorage">remoteStorage</a>.
+</p>
+<p>
+The idea is to use (JSON representations of) Git's primitive objects -
+blobs, trees, and commits - and store them in remoteStorage by their
+hashes.
+</p>
+<p>
+You have a chain of commits in your HTML5 localstorage, and sync them
+(using a tree-walking protocol even dumber than Git's dumb protocol)
+to the remoteStorage.
+</p>
+<p>
+The use case is the exchange of structured, social data, such as
+shared outlines and microblogging: apps structure their data as
+filesystems, and then use a generic mechanism to exchange them.
+</p>
+<p>
+Users only edit their own data.  Workspaces that appear shared are
+done by overlaying data from multiple users.  For example, in a
+microblogging app, every user could create a filesystem containing
+folders of the form YYYY/MM/DD containing individual tweets as JSON.
+Other users would fetch these trees, and then use IndexedDB to index
+them and present a unified timelime.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-3" class="outline-2">
+<h2 id="sec-3">Blobs </h2>
+<div class="outline-text-2" id="text-3">
+
+
+<p>
+Blobs store arbitrary data, corresponding to files. A blob's content
+is not interpreted by Lolstorage.
+</p>
+
+</div>
+
+<div id="outline-container-3.1" class="outline-3">
+<h3 id="sec-3.1">Example </h3>
+<div class="outline-text-3" id="text-3.1">
+
+
+
+
+
+<pre class="example">Hello world!
+</pre>
+
+
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-4" class="outline-2">
+<h2 id="sec-4">Trees </h2>
+<div class="outline-text-2" id="text-4">
+
+
+<p>
+A tree is a JSON object with one property for each tree entry; the
+property's name is the file name, the property's value is the hash of
+the object pointed to.
+</p>
+
+</div>
+
+<div id="outline-container-4.1" class="outline-3">
+<h3 id="sec-4.1">Example </h3>
+<div class="outline-text-3" id="text-4.1">
+
+
+
+
+
+<pre class="example">{
+  "hello-world.txt": "blob-sha1-4a5897337a1dd0caa2c9d4a9f38a50a68338dbaf",
+  "sub-directory": "tree-sha1-2f738e87d8e64d2b453da99182d982ff02385d64"
+}
+</pre>
+
+
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-5" class="outline-2">
+<h2 id="sec-5">Commits </h2>
+<div class="outline-text-2" id="text-5">
+
+
+<p>
+Commits represent the state of a tree at a specific point in time.
+</p>
+<p>
+A commit is a JSON object with the following required properties:
+</p>
+<ul>
+<li>
+<code>parents</code>: list of hashes of parent commits (possibly empty)
+</li>
+<li>
+<code>hash</code>: hash of tree root
+
+</li>
+</ul>
+
+</div>
+
+<div id="outline-container-5.1" class="outline-3">
+<h3 id="sec-5.1">Example </h3>
+<div class="outline-text-3" id="text-5.1">
+
+
+
+
+
+<pre class="example">{
+  "parents": [ "commit-sha1-b2a06022a6001af847e473c44abcebcee8118cc3" ],
+  "hash": "tree-sha1-ea21bee3908698e5afdd336e404ff944a7b913d2"
+}
+</pre>
+
+
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-6" class="outline-2">
+<h2 id="sec-6">Reflist </h2>
+<div class="outline-text-2" id="text-6">
+
+
+<p>
+Reflists contain a number of branches (pointers to commits).  There
+should always be a ref named "master" in the reflist.
+</p>
+
+
+
+<pre class="example">{
+  "master": "commit-sha1-4a5897337a1dd0caa2c9d4a9f38a50a68338dbaf",
+  "other-branch": "commit-sha1-7ef60eea13aadab6e965a69186b5ecc2c388214d"
+}
+</pre>
+
+
+
+
+</div>
+
+</div>
+
+<div id="outline-container-7" class="outline-2">
+<h2 id="sec-7">Hashes </h2>
+<div class="outline-text-2" id="text-7">
+
+
+<p>
+A hash is a string containing
+</p><ul>
+<li>
+type ("blob", "tree", or "commit"),
+</li>
+<li>
+a dash ("-"),
+</li>
+<li>
+algorithm name (currently only "sha1"),
+</li>
+<li>
+a dash,
+</li>
+<li>
+and the hash value in hexadecimal.
+
+</li>
+</ul>
+
+<p>All alphabetical characters are lowercase.
+</p>
+
+</div>
+
+<div id="outline-container-7.1" class="outline-3">
+<h3 id="sec-7.1">Examples </h3>
+<div class="outline-text-3" id="text-7.1">
+
+
+
+
+
+<pre class="example">"blob-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
+"tree-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
+"commit-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
+</pre>
+
+
+
+
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-8" class="outline-2">
+<h2 id="sec-8">RemoteStorage </h2>
+<div class="outline-text-2" id="text-8">
+
+
+<p>
+For now, all data is stored in the public category, to enable easy
+sharing, at the cost of some loss of security for unshared, private
+data.
+</p>
+<p>
+The unit of sharing is the reflist.  Inside the public category, there
+should be a reflist named "lolstorage-public" containing public
+branches.
+</p>
+<p>
+Other reflists with unguessable names may be used for restricted
+sharing.  Only the people with the name of the reflist may access the
+branches in it.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-9" class="outline-2">
+<h2 id="sec-9">Issues </h2>
+<div class="outline-text-2" id="text-9">
+
+
+
+</div>
+
+<div id="outline-container-9.1" class="outline-3">
+<h3 id="sec-9.1">Generation numbers </h3>
+<div class="outline-text-3" id="text-9.1">
+
+
+<p>
+Should we add <a href="http://stackoverflow.com/questions/6702821/git-commit-generation-numbers">generation numbers</a> to commits?  Linus has called their
+absence in the original Git design "probably the only real design
+mistake".
+</p></div>
+</div>
+</div>
+<div id="postamble">
+<p class="date"> Date: 2012-04-28 18:27:46 CEST</p>
+</div>
+</div>
+</body>
+</html>
