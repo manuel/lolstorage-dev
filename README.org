@@ -1,7 +1,4 @@
-#+TITLE: Lolstorage
 #+OPTIONS: num:nil toc:1 creator:nil author:nil
-#+AUTHOR: Manuel Simoni
-#+EMAIL: msimoni@gmail.com
 
 * Contact
 
@@ -38,9 +35,9 @@ is not interpreted by Lolstorage.
 
 ** Example
 
-#+begin_example
+#+begin_src text
 Hello world!
-#+end_example
+#+end_src
 
 * Trees
 
@@ -50,12 +47,12 @@ the object pointed to.
 
 ** Example
 
-#+begin_example
+#+begin_src json
 {
   "hello-world.txt": "blob-sha1-4a5897337a1dd0caa2c9d4a9f38a50a68338dbaf",
   "sub-directory": "tree-sha1-2f738e87d8e64d2b453da99182d982ff02385d64"
 }
-#+end_example
+#+end_src
 
 * Commits
 
@@ -68,24 +65,24 @@ A commit is a JSON object with the following required properties:
 
 ** Example
 
-#+begin_example
+#+begin_src json
 {
   "parents": [ "commit-sha1-b2a06022a6001af847e473c44abcebcee8118cc3" ],
   "hash": "tree-sha1-ea21bee3908698e5afdd336e404ff944a7b913d2"
 }
-#+end_example
+#+end_src
 
 * Reflist
 
 Reflists contain a number of branches (pointers to commits).  There
 should always be a ref named "master" in the reflist.
 
-#+begin_example
+#+begin_src json
 {
   "master": "commit-sha1-4a5897337a1dd0caa2c9d4a9f38a50a68338dbaf",
   "other-branch": "commit-sha1-7ef60eea13aadab6e965a69186b5ecc2c388214d"
 }
-#+end_example
+#+end_src
 
 * Hashes
 
@@ -100,11 +97,11 @@ All alphabetical characters are lowercase.
 
 ** Examples
 
-#+begin_example
+#+begin_src text
 "blob-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
 "tree-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
 "commit-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
-#+end_example
+#+end_src
 
 * RemoteStorage
 
