@@ -1,0 +1,129 @@
+#+TITLE: Lolstorage
+#+OPTIONS: num:nil toc:1 creator:nil author:nil
+#+AUTHOR: Manuel Simoni
+#+EMAIL: msimoni@gmail.com
+
+* Contact
+
+Manuel Simoni <msimoni@gmail.com>
+
+* Introduction
+
+Lolstorage is an attempt to exchange filesystem-like data over
+Unhosted [[http://www.w3.org/community/unhosted/wiki/RemoteStorage][remoteStorage]].
+
+The idea is to use (JSON representations of) Git's primitive objects -
+blobs, trees, and commits - and store them in remoteStorage by their
+hashes.
+
+You have a chain of commits in your HTML5 localstorage, and sync them
+(using a tree-walking protocol even dumber than Git's dumb protocol)
+to the remoteStorage.
+
+The use case is the exchange of structured, social data, such as
+shared outlines and microblogging: apps structure their data as
+filesystems, and then use a generic mechanism to exchange them.
+
+Users only edit their own data.  Workspaces that appear shared are
+done by overlaying data from multiple users.  For example, in a
+microblogging app, every user could create a filesystem containing
+folders of the form YYYY/MM/DD containing individual tweets as JSON.
+Other users would fetch these trees, and then use IndexedDB to index
+them and present a unified timelime.
+
+* Blobs
+
+Blobs store arbitrary data, corresponding to files. A blob's content
+is not interpreted by Lolstorage.
+
+** Example
+
+#+begin_example
+Hello world!
+#+end_example
+
+* Trees
+
+A tree is a JSON object with one property for each tree entry; the
+property's name is the file name, the property's value is the hash of
+the object pointed to.
+
+** Example
+
+#+begin_example
+{
+  "hello-world.txt": "blob-sha1-4a5897337a1dd0caa2c9d4a9f38a50a68338dbaf",
+  "sub-directory": "tree-sha1-2f738e87d8e64d2b453da99182d982ff02385d64"
+}
+#+end_example
+
+* Commits
+
+Commits represent the state of a tree at a specific point in time.
+
+A commit is a JSON object with the following required properties:
+
+ * =parents=: list of hashes of parent commits (possibly empty)
+ * =hash=: hash of tree root
+
+** Example
+
+#+begin_example
+{
+  "parents": [ "commit-sha1-b2a06022a6001af847e473c44abcebcee8118cc3" ],
+  "hash": "tree-sha1-ea21bee3908698e5afdd336e404ff944a7b913d2"
+}
+#+end_example
+
+* Reflist
+
+Reflists contain a number of branches (pointers to commits).  There
+should always be a ref named "master" in the reflist.
+
+#+begin_example
+{
+  "master": "commit-sha1-4a5897337a1dd0caa2c9d4a9f38a50a68338dbaf",
+  "other-branch": "commit-sha1-7ef60eea13aadab6e965a69186b5ecc2c388214d"
+}
+#+end_example
+
+* Hashes
+
+A hash is a string containing
+ * type ("blob", "tree", or "commit"),
+ * a dash ("-"),
+ * algorithm name (currently only "sha1"),
+ * a dash,
+ * and the hash value in hexadecimal.
+
+All alphabetical characters are lowercase.
+
+** Examples
+
+#+begin_example
+"blob-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
+"tree-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
+"commit-sha1-acbaef275e46a7f14c1ef456fff2c8bbe8c84724"
+#+end_example
+
+* RemoteStorage
+
+For now, all data is stored in the public category, to enable easy
+sharing, at the cost of some loss of security for unshared, private
+data.
+
+The unit of sharing is the reflist.  Inside the public category, there
+should be a reflist named "lolstorage-public" containing public
+branches.
+
+Other reflists with unguessable names may be used for restricted
+sharing.  Only the people with the name of the reflist may access the
+branches in it.
+
+* Issues
+
+** Generation numbers
+
+Should we add [[http://stackoverflow.com/questions/6702821/git-commit-generation-numbers][generation numbers]] to commits?  Linus has called their
+absence in the original Git design "probably the only real design
+mistake".
