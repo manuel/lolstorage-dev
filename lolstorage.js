@@ -10,7 +10,7 @@ var lol = (function() {
     /** Creates a new localStorage content store with the given ID.
         IDs allow the use of independent "storage areas" in the
         browser's single localStorage namespace.  The ID should not
-        contain the character "/". */
+        contain special characters. */
     function LocalStore(id) {
         this.id = id;
     }
@@ -20,7 +20,7 @@ var lol = (function() {
     }
 
     LocalStore.prototype.localStorageKey = function(key) {
-        return PREFIX + "/" + this.id + "/" + key;
+        return PREFIX + "-" + this.id + "-" + key;
     }
 
     LocalStore.prototype.get = function(key, cb) {
@@ -41,13 +41,45 @@ var lol = (function() {
         function doit() {
             try {
                 window.localStorage.setItem(store.localStorageKey(key), value);
-                cb(true, "Put local object: " + key);
+                cb(true, "Put object " + key + " in " + store);
             } catch(err) {
                 cb(false, err);
             }
         }
         setTimeout(doit, 1);
     }
+
+    /* RemoteStorage store. */
+    function RemoteStore(label, client) {
+        this.label = label;
+        this.client = client;
+    }
+
+    RemoteStore.prototype.toString = function() {
+        return "[Remote store " + this.label + "]";
+    }
+
+    RemoteStore.prototype.get = function(key, cb) {
+        this.client.get(key, function(error, data) {
+            if (error) {
+                cb(false, error);
+            } else {
+                cb(true, data);
+            }
+        });
+    };
+    
+    RemoteStore.prototype.put = function(key, value, cb) {
+        this.client.put(key, value, function(error) {
+            if (error) {
+                cb(false, error);
+            } else {
+                cb(true);
+            }
+        });
+    };
+
+    // Version control objects
 
     var BLOB_TYPE = "blob";
     var TREE_TYPE = "tree";
@@ -121,7 +153,7 @@ var lol = (function() {
         // Remote object already in store locally?
         localStore.get(hash,
                        task("Check if " + hash + " in " + localStore, function(ok, res) {
-                           if (res !== null) {
+                           if (res != null) {
                                cb(true, "Hit " + hash + " in " + localStore);
                            } else {
                                // Fetch remote object and perform its custom pull logic.
@@ -129,8 +161,13 @@ var lol = (function() {
                                                task("Get object " + hash + " from " + remoteStore,
                                                        function(ok, res) {
                                                            if (ok) {
-                                                               var remote = parse(res);
-                                                               remote.pull(remoteStore, localStore, cb);
+                                                               if (res != null) {
+                                                                   var remote = parse(res);
+                                                                   remote.pull(remoteStore, localStore, cb);
+                                                               } else {
+                                                                   cb(false, "Not found " + hash + 
+                                                                      " in " + remoteStore);
+                                                               }
                                                            } else {
                                                                cb(false, res);
                                                            }
@@ -192,22 +229,17 @@ var lol = (function() {
         return multiCB;
     }
 
-    var tasks = [];
-
     function task(label, cb) {
         var taskObject = { label: label, callback: cb, done: false };
         console.log(label);
         console.log(taskObject);
-        tasks.push(taskObject);
         function wrapperCB(ok, res) {
-            var i = tasks.indexOf(taskObject);
-            if (i != -1) tasks.splice(i, 1);
-            cb(ok, res);
             taskObject.done = true;
             taskObject.ok = ok;
             taskObject.res = res;
             console.log("[done] " + label);
             console.log(taskObject);
+            cb(ok, res);
         }
         return wrapperCB;
     }
@@ -218,10 +250,10 @@ var lol = (function() {
     */
 
     return {
-        "tasks": tasks,
         "Blob": Blob,
         "Commit": Commit,
         "LocalStore": LocalStore,
+        "RemoteStore": RemoteStore,
         "Tree": Tree,
         "TreeEntry": TreeEntry,
         "content": content,
