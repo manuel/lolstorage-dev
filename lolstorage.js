@@ -7,6 +7,10 @@ var lol = (function() {
 
     var PREFIX = "lol";
     
+    function storageKey(key, storeID) {
+        return PREFIX + "_" + storeID + "_" + key;
+    }
+
     /** Creates a new localStorage content store with the given ID.
         IDs allow the use of independent "storage areas" in the
         browser's single localStorage namespace.  The ID should not
@@ -17,50 +21,48 @@ var lol = (function() {
 
     LocalStore.prototype.toString = function() {
         return "[Local store " + this.id + "]";
-    }
-
-    LocalStore.prototype.localStorageKey = function(key) {
-        return PREFIX + "-" + this.id + "-" + key;
-    }
+    };
 
     LocalStore.prototype.get = function(key, cb) {
         var store = this;
         function doit() {
             try {
-                var value = window.localStorage.getItem(store.localStorageKey(key));
-                cb(true, value);
+                var value = window.localStorage.getItem(storageKey(key, store.id));
+                console.log("Get " + key +  " from " + store);
+                cb(true, (value !== null) ? value : undefined);
             } catch(err) {
                 cb(false, err);
             }
         }
         setTimeout(doit, 1);
-    }
+    };
     
     LocalStore.prototype.put = function(key, value, cb) {
         var store = this;
         function doit() {
             try {
-                window.localStorage.setItem(store.localStorageKey(key), value);
-                cb(true, "Put object " + key + " in " + store);
+                window.localStorage.setItem(storageKey(key, store.id), value);
+                console.log("Put " + key +  " to " + store);
+                cb(true);
             } catch(err) {
                 cb(false, err);
             }
         }
         setTimeout(doit, 1);
-    }
+    };
 
     /* RemoteStorage store. */
-    function RemoteStore(label, client) {
-        this.label = label;
+    function RemoteStore(id, client) {
+        this.id = id;
         this.client = client;
     }
 
     RemoteStore.prototype.toString = function() {
-        return "[Remote store " + this.label + "]";
-    }
+        return "[Remote store " + this.id + "]";
+    };
 
     RemoteStore.prototype.get = function(key, cb) {
-        this.client.get(key, function(error, data) {
+        this.client.get(storageKey(key, this.id), function(error, data) {
             if (error) {
                 cb(false, error);
             } else {
@@ -70,7 +72,7 @@ var lol = (function() {
     };
     
     RemoteStore.prototype.put = function(key, value, cb) {
-        this.client.put(key, value, function(error) {
+        this.client.put(storageKey(key, this.id), value, function(error) {
             if (error) {
                 cb(false, error);
             } else {
@@ -83,8 +85,6 @@ var lol = (function() {
 
     var BLOB_TYPE = "blob";
     var TREE_TYPE = "tree";
-    var TREE_ENTRY_TYPE = "tree-entry";
-    var COMMIT_TYPE = "commit";
 
     function Blob(data) {
         this.lol_type = BLOB_TYPE;
@@ -94,19 +94,6 @@ var lol = (function() {
     function Tree(entries) {
         this.lol_type = TREE_TYPE;
         this.lol_entries = entries;
-    }
-
-    function TreeEntry(name, hash) {
-        this.lol_type = TREE_ENTRY_TYPE;
-        this.lol_name = name;
-        this.lol_hash = hash;
-    }
-
-    function Commit(parents, message, root) {
-        this.lol_type = COMMIT_TYPE;
-        this.lol_parents = parents;
-        this.lol_message = message;
-        this.lol_root = root;
     }
 
     /** Returns the hash of the object - what gets used as the key in
@@ -119,11 +106,7 @@ var lol = (function() {
 
     /** Returns the content of the object - what gets stored as the
         value in the content store.  For readability, we're indenting
-        the JSON with a tab.
-
-        Oh, and JavaScript wieners may say that this should be a
-        method of the individual objects.  To which we agree in
-        general, but are too lazy to implement in particular. */
+        the JSON with a tab. */
     function content(object) {
         return JSON.stringify(object, undefined, "\t");
     }
@@ -141,74 +124,105 @@ var lol = (function() {
         switch(typeString) {
         case BLOB_TYPE: return Blob.prototype;
         case TREE_TYPE: return Tree.prototype;
-        case TREE_ENTRY_TYPE: return TreeEntry.prototype;
-        case COMMIT_TYPE: return Commit.prototype;
         default: throw("Unknown type string: " + typeString);
         }
     }
-
-    /** Pulls a remote object by hash from a remote store to a local
-        store. */
-    function pull(hash, remoteStore, localStore, cb) {
-        // Remote object already in store locally?
-        localStore.get(hash,
-                       task("Check if " + hash + " in " + localStore, function(ok, res) {
-                           if (res != null) {
-                               cb(true, "Hit " + hash + " in " + localStore);
-                           } else {
-                               // Fetch remote object and perform its custom pull logic.
-                               remoteStore.get(hash,
-                                               task("Get object " + hash + " from " + remoteStore,
-                                                       function(ok, res) {
-                                                           if (ok) {
-                                                               if (res != null) {
-                                                                   var remote = parse(res);
-                                                                   remote.pull(remoteStore, localStore, cb);
-                                                               } else {
-                                                                   cb(false, "Not found " + hash + 
-                                                                      " in " + remoteStore);
-                                                               }
-                                                           } else {
-                                                               cb(false, res);
-                                                           }
-                                                       }));
-                               
-                           }
-                       }));
+    
+    /** Pulls an object (typically a tree) identified by srcHash from
+        the source store (src) to the destination store (dst) whose
+        current state is dstHash (or null if destination is
+        empty/uninitialized). */
+    function sync(src, srcHash, dst, dstHash, cb) {
+        dst.get(srcHash,
+                function(ok, res) {
+                    if (ok) {
+                        if (res !== undefined) {
+                            // Source object already in destination? We're done.
+                            cb(true);
+                        } else {
+                            // Fetch source object and perform its custom sync logic.
+                            src.get(srcHash, function(ok, res) {
+                                if (ok) {
+                                    if (res !== undefined) {
+                                        var srcObj = parse(res);
+                                        srcObj.sync(src, srcHash, dst, dstHash, cb);
+                                    } else {
+                                        cb(false, "Source object " + srcHash + 
+                                           " missing in source store " + src);
+                                    }
+                                } else {
+                                    cb(false, res);
+                                }
+                            });
+                        }
+                    } else {
+                        cb(false, res);
+                    }
+                });
     }
 
-    Blob.prototype.pull = function(remoteStore, localStore, cb) {
-        localStore.put(hash(this), content(this), cb);
+    Blob.prototype.sync = function(src, srcHash, dst, dstHash, cb) {
+        dst.put(hash(this), content(this), cb);
     };
 
-    Tree.prototype.pull = function(remoteStore, localStore, cb) {
-        var that = this;
-        var treeCB = task("Pull tree " + hash(this) + " from " + remoteStore + " to " + localStore, function (ok) {
-            if (ok) {
-                localStore.put(hash(that), content(that), cb);
-            } else {
-                cb(false, "Cannot pull tree: " + content(that));
-            }
-        });
-        var entryCount = this.lol_entries.length;
-        if (entryCount > 0) {
-            var multiCB = multiCallback(entryCount, treeCB);
-            for (var i = 0; i < entryCount; i++) {
-                var entry = this.lol_entries[i];
-                entry.pull(remoteStore, localStore, multiCB);
-            }
+    Tree.prototype.sync = function(src, srcHash, dst, dstHash, cb) {
+        var srcObj = this;
+        if (dstHash !== null) {
+            dst.get(dstHash, function(ok, res) {
+                if (ok) {
+                    if (res !== undefined) {
+                        var dstObj = parse(res);
+                        if (dstObj.lol_type === TREE_TYPE) {
+                            treeSync(src, srcObj, dst, dstObj, cb);
+                        } else {
+                            treeSync(src, srcObj, dst, null, cb);
+                        }
+                    } else {
+                        treeSync(src, srcObj, dst, null, cb);                        
+                    }
+                } else {
+                    cb(false, res);
+                }
+            });
         } else {
-            treeCB(ok);
+            treeSync(src, srcObj, dst, null, cb);
         }
     };
 
-    TreeEntry.prototype.pull = function(remoteStore, localStore, cb) {
-        pull(this.lol_hash, remoteStore, localStore, cb);
-    };
+    function treeSync(src, srcTree, dst, dstTree, cb) {
+        // This callback gets called after all children have been synced.
+        function treeCB(ok) {
+            if (ok) {
+                dst.put(hash(srcTree), content(srcTree), cb);
+            } else {
+                cb(false, "Failed to sync tree " + hash(srcTree));
+            }
+        }
 
-    Commit.prototype.pull = function(remoteStore, localStore, cb) {
-        cb(false, "Commit pulling not yet implemented.");
-    };
+        var srcEntries = srcTree.lol_entries;
+        var dstEntries = (dstTree !== null) ? dstTree.lol_entries : {};
+        var diff = [];
+
+        for (var name in srcEntries) {
+            var srcHash = srcEntries[name];
+            var dstHash = dstEntries[name];
+            if (dstHash === undefined) {
+                diff.push({ srcHash: srcHash, dstHash: null });
+            } else if (dstHash !== srcHash) {
+                diff.push({ srcHash: srcHash, dstHash: dstHash });
+            }
+        }
+
+        if (diff.length > 0) {
+            var multiCB = multiCallback(diff.length, treeCB);
+            for (var i = 0; i < diff.length; i++) {
+                var entry = diff[i];
+                sync(src, entry.srcHash, dst, entry.dstHash, multiCB);
+            }
+        } else {
+            treeCB(true);
+        }
+    }
 
     /** Returns a callback function that OKs the given callback after
         it has been called count times. */
@@ -229,21 +243,6 @@ var lol = (function() {
         return multiCB;
     }
 
-    function task(label, cb) {
-        var taskObject = { label: label, callback: cb, done: false };
-        console.log(label);
-        console.log(taskObject);
-        function wrapperCB(ok, res) {
-            taskObject.done = true;
-            taskObject.ok = ok;
-            taskObject.res = res;
-            console.log("[done] " + label);
-            console.log(taskObject);
-            cb(ok, res);
-        }
-        return wrapperCB;
-    }
-
     /*
       EXPORTS
       ------------------------------------------------------------------
@@ -251,15 +250,13 @@ var lol = (function() {
 
     return {
         "Blob": Blob,
-        "Commit": Commit,
         "LocalStore": LocalStore,
         "RemoteStore": RemoteStore,
         "Tree": Tree,
-        "TreeEntry": TreeEntry,
         "content": content,
         "hash": hash,
         "parse": parse,
-        "pull": pull,
+        "sync": sync,
     };
 
 }());
