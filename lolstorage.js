@@ -270,7 +270,7 @@ var lol = (function() {
             var multiCB = multiCallback(diffs.length, treeCB);
             for (var i = 0; i < diffs.length; i++) {
                 var diff = diffs[i];
-                sync(src, entry.srcHash, dst, entry.dstHash, multiCB);
+                sync(src, diff.srcHash, dst, diff.dstHash, multiCB);
             }
         } else {
 	    // No changed entries.  Store tree.
