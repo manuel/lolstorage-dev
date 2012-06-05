@@ -98,11 +98,11 @@ var lol = (function() {
     };
 
     RemoteStore.prototype.get = function(key, cb) {
-        this.client.get(storageKey(key, store.id), cb);
+        this.client.get(storageKey(key, this.id), cb);
     };
     
     RemoteStore.prototype.put = function(key, value, cb) {
-        this.client.put(storageKey(key, store.id), value, cb);
+        this.client.put(storageKey(key, this.id), value, cb);
     };
 
     /*
