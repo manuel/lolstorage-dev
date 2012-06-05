@@ -180,6 +180,9 @@ var lol = (function() {
         default: throw("Unknown type string: " + typeString);
         }
     }
+
+    Blob.prototype.toString = content;
+    Tree.prototype.toString = content;
     
     /*
       SYNCHRONIZATION
@@ -337,6 +340,61 @@ var lol = (function() {
     }
 
     /*
+      INTEGRITY CHECKING
+      ------------------------------------------------------------------
+    */
+
+    /** Checks whether all items under a root hash exist in the store,
+        and their hashes are correct. */
+    function fsck(store, hash, cb) {
+        store.get(hash, function(err, res) {
+            if (!err) {
+                if (res !== undefined) {
+                    var obj = parse(res);
+                    obj.fsck(store, hash, cb);
+                } else {
+                    cb("Object " + hash + " missing in " + store);
+                }
+            } else {
+                cb(err);
+            }
+        });
+    }
+
+    Blob.prototype.fsck = function(store, h, cb) {
+        if (h !== hash(this)) {
+            cb("Incorrect hash " + h + " for object " + this);
+        } else {
+            cb(null);
+        }
+    }
+
+    Tree.prototype.fsck = function(store, h, cb) {
+        if (h !== hash(this)) {
+            cb("Incorrect hash " + h + " for tree " + this);
+        } else {
+            var count = Object.keys(this.lol_entries).length;
+            if (count > 0) {
+                var done = 0;
+                for (var name in this.lol_entries) {
+                    fsck(store, this.lol_entries[name], function(err) {
+                        if (!err) {
+                            done++;
+                            if (done === count) {
+                                cb(null);
+                            }
+                        } else {
+                            cb(err);
+                        }
+                    });
+                }
+            } else {
+                cb(null);
+            }
+        }     
+    }
+
+    /*
       EXPORTS
       ------------------------------------------------------------------
     */
@@ -348,6 +406,7 @@ var lol = (function() {
         "RemoteStore": RemoteStore,
         "Tree": Tree,
         "content": content,
+        "fsck": fsck,
         "hash": hash,
         "parse": parse,
         "sync": sync,

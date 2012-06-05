@@ -24,3 +24,6 @@ s1.put(lol.hash(subTree), lol.content(subTree), consoleCB);
 s1.put(lol.hash(tree), lol.content(tree), consoleCB);
 
 lol.sync(s1, lol.hash(tree), s2, null, consoleCB);
+
+lol.fsck(s1, lol.hash(tree), consoleCB);
+lol.fsck(s2, lol.hash(tree), consoleCB);
