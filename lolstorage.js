@@ -1,25 +1,52 @@
 /*
-  LOLSTORAGE: REALLY SIMPLE DECENTRALIZED SYNDICATION
+  LOLSTORAGE: DECENTRALIZED CONTENT-ADDRESSED TREE SYNCHRONIZATION
   ----------------------------------------------------------------------
 */
 
 var lol = (function() {
 
-    var PREFIX = "lol";
-    
+    /** The lowlevel name under which an object identified by a key
+        gets stored.  The store ID allows multiple independent storage
+        areas in the same underlying storage. */
     function storageKey(key, storeID) {
-        return PREFIX + "_" + storeID + "_" + key;
+        return "lol-" + storeID + "-" + key;
     }
+
+    /*
+      STORES
+      ------------------------------------------------------------------
+
+      A store maps string keys to string values.
+
+      A store has two methods:
+
+      - get(key, callback) retrieves a value from the store.  It calls
+        the callback with two arguments, error and result.  If no
+        error occurred, error is null and the result is the string
+        value (or undefined if the key has no value).  If an error
+        occurred, error is an error object and the result is
+        undefined.
+
+      - put(key, value, callback) stores a value associated with a key
+        in the store.  It calls the callback with one argument, error.
+        If no error occurred, error is null.  If an error occurred,
+        error is an error object.
+    */
 
     /*
       LOCAL STORE
       ------------------------------------------------------------------
     */
 
-    /** Creates a new localStorage content store with the given ID.
-        IDs allow the use of independent "storage areas" in the
-        browser's single localStorage namespace.  The ID should not
-        contain special characters. */
+    /** Creates a new localStorage store with the given store ID.  IDs
+        allow the use of independent storage areas in the browser's
+        single localStorage namespace.  The ID should not contain
+        special characters.
+
+        Because localStorage is synchronous, and we don't want to mess
+        things up by synchronously calling callbacks that expect to be
+        called asynchronously, we use asynchronously() to defer
+        callback execution. */
     function LocalStore(id) {
         this.id = id;
     }
@@ -30,30 +57,28 @@ var lol = (function() {
 
     LocalStore.prototype.get = function(key, cb) {
         var store = this;
-        function doit() {
+        asynchronously(function () {
             try {
                 var value = window.localStorage.getItem(storageKey(key, store.id));
-                console.log("Get " + key +  " from " + store);
-                cb(true, (value !== null) ? value : undefined);
             } catch(err) {
-                cb(false, err);
+                cb(err);
+                return;
             }
-        }
-        setTimeout(doit, 1);
+            cb(null, (value !== null) ? value : undefined);
+        });
     };
     
     LocalStore.prototype.put = function(key, value, cb) {
         var store = this;
-        function doit() {
+        asynchronously(function () {
             try {
                 window.localStorage.setItem(storageKey(key, store.id), value);
-                console.log("Put " + key +  " to " + store);
-                cb(true);
             } catch(err) {
-                cb(false, err);
+                cb(err);
+                return;
             }
-        }
-        setTimeout(doit, 1);
+            cb(null);
+        });
     };
 
     /*
@@ -61,6 +86,8 @@ var lol = (function() {
       ------------------------------------------------------------------
     */
 
+    /** Creates a remoteStorage store using the given store ID (see
+        above) and remoteStorage API client. */
     function RemoteStore(id, client) {
         this.id = id;
         this.client = client;
@@ -71,28 +98,33 @@ var lol = (function() {
     };
 
     RemoteStore.prototype.get = function(key, cb) {
-        var store = this;
-        this.client.get(storageKey(key, store.id), function(error, data) {
-            if (error) {
-                cb(false, error);
-            } else {
-                console.log("Get " + key +  " from " + store);
-                cb(true, data);
-            }
-        });
+        this.client.get(storageKey(key, store.id), cb);
     };
     
     RemoteStore.prototype.put = function(key, value, cb) {
-        var store = this;
-        this.client.put(storageKey(key, store.id), value, function(error) {
-            if (error) {
-                cb(false, error);
-            } else {
-                console.log("Put " + key +  " to " + store);
-                cb(true);
-            }
-        });
+        this.client.put(storageKey(key, store.id), value, cb);
     };
+
+    /*
+      CONSOLE LOGGING STORE
+      ------------------------------------------------------------------
+
+      Wraps an underlying store, and prints logging messages to console.
+    */
+
+    function LoggingStore(wrapped) {
+        this.wrapped = wrapped;
+    }
+
+    LoggingStore.prototype.get = function(key, cb) {
+        console.log("Get " + key + " from " + this.wrapped);
+        this.wrapped.get(key, cb);
+    }
+
+    LoggingStore.prototype.put = function(key, value, cb) {
+        console.log("Put " + key + " to " + this.wrapped);
+        this.wrapped.put(key, value, cb);
+    }
 
     /*
       OBJECTS
@@ -102,11 +134,15 @@ var lol = (function() {
     var BLOB_TYPE = "blob";
     var TREE_TYPE = "tree";
 
+    /** Creates a new blob with the given data, which is an arbitrary
+        JSON value. */
     function Blob(data) {
         this.lol_type = BLOB_TYPE;
         this.lol_data = data;
     }
 
+    /** Creates a new tree with the given entries, which is a
+        dictionary mapping file names to hashes. */
     function Tree(entries) {
         this.lol_type = TREE_TYPE;
         this.lol_entries = entries;
@@ -114,10 +150,9 @@ var lol = (function() {
 
     /** Returns the hash of the object - what gets used as the key in
         the content store.  Currently, this uses SHA1, but it can
-        later be updated to other hash algorithms by our clever use of
-        a prefix. */
+        later be updated to other hash algorithms. */
     function hash(object) {
-        return "sha1-" + Crypto.SHA1(content(object));
+        return "sha1_" + Crypto.SHA1(content(object));
     }
 
     /** Returns the content of the object - what gets stored as the
@@ -127,6 +162,8 @@ var lol = (function() {
         return JSON.stringify(object, undefined, "\t");
     }
 
+    /** Parses an object from a JSON-formatted text, and sets up its
+        prototype. */
     function parse(text) {
         return JSON.parse(text, function(key, value) {
             if (key === "lol_type") {
@@ -158,38 +195,42 @@ var lol = (function() {
         exists in a store, all its entries are assumed to exist in the
         store, too. */
     function sync(src, srcHash, dst, dstHash, cb) {
-        dst.get(srcHash, function(ok, res) {
-            if (ok) {
+        dst.get(srcHash, function(err, res) {
+            if (!err) {
                 if (res !== undefined) {
                     // Source object already in destination store.
                     // We're done.
-                    cb(true);
+                    cb(null);
                 } else {
 		    // Source object not in destination store.  Fetch
                     // source object from source store and perform its
                     // type-specific sync logic.
-                    src.get(srcHash, function(ok, res) {
-                        if (ok) {
+                    src.get(srcHash, function(err, res) {
+                        if (!err) {
                             if (res !== undefined) {
                                 var srcObj = parse(res);
                                 srcObj.sync(src, srcHash, dst, dstHash, cb);
                             } else {
-                                cb(false, "Source object " + srcHash + 
+                                cb("Source object " + srcHash + 
                                    " missing in source store " + src);
                             }
                         } else {
-                            cb(false, res);
+                            cb(err);
                         }
                     });
                 }
             } else {
-                cb(false, res);
+                cb(err);
             }
         });
     }
 
     Blob.prototype.sync = function(src, srcHash, dst, dstHash, cb) {
-	// Simply update the blob.
+	// Simply store the blob in the destination store.
+        //
+        // FYI: If the protocol supported PATCH (which it doesn't),
+	// this could diff against the destination object and transfer
+	// only the diff.
         dst.put(hash(this), content(this), cb);
     };
 
@@ -197,8 +238,8 @@ var lol = (function() {
         var srcObj = this;
         if (dstHash !== null) {
 	    // Destination store has a current state. Fetch it.
-            dst.get(dstHash, function(ok, res) {
-                if (ok) {
+            dst.get(dstHash, function(err, res) {
+                if (!err) {
                     if (res !== undefined) {
                         var dstObj = parse(res);
                         if (dstObj.lol_type === TREE_TYPE) {
@@ -211,11 +252,11 @@ var lol = (function() {
                             treeSync(src, srcObj, dst, null, cb);
                         }
                     } else {
-                        cb(false, "Destination object " + dstHash + 
+                        cb("Destination object" + dstHash + 
                            " missing in destination store " + dst);
                     }
                 } else {
-                    cb(false, res);
+                    cb(err);
                 }
             });
         } else {
@@ -230,19 +271,7 @@ var lol = (function() {
 	source and destination trees, they're probably similar. */
     function treeSync(src, srcTree, dst, dstTree, cb) {
 
-        // This callback gets called after all child entries have been
-        // synced, and stores the tree in the destination store.  This
-        // ensures the invariant that a tree only gets stored after
-        // all its entries have been stored.
-        function treeCB(ok) {
-            if (ok) {
-                dst.put(hash(srcTree), content(srcTree), cb);
-            } else {
-                cb(false, "Failed to sync tree " + hash(srcTree));
-            }
-        }
-
-	// Compute a list of differences between source and
+        // Compute a list of differences between source and
 	// destination tree.
         var srcEntries = srcTree.lol_entries;
         var dstEntries = (dstTree !== null) ? dstTree.lol_entries : {};
@@ -260,44 +289,51 @@ var lol = (function() {
 		// against entry in destination tree.
                 diffs.push({ srcHash: srcHash, dstHash: dstHash });
             }
-	    // Else: Unchanged entry.  Nothing to do.
+	    // Else: Entry in source and destination trees with same
+	    // hash.  Nothing to do.
         }
 
-	// Construct a multi-callback for combining the many callbacks
-	// for each difference from the previous step, and sync each
-	// of them.
-        if (diffs.length > 0) {
-            var multiCB = multiCallback(diffs.length, treeCB);
-            for (var i = 0; i < diffs.length; i++) {
+        // For each changed entry in the tree, sync it.  When all are
+        // done, call the final callback.
+        var count = diffs.length;
+        if (count > 0) {
+            var done = 0;
+            for (var i = 0; i < count; i++) {
                 var diff = diffs[i];
-                sync(src, diff.srcHash, dst, diff.dstHash, multiCB);
+                sync(src, diff.srcHash, dst, diff.dstHash, function(err) {
+                    if (!err) {
+                        done++;
+                        if (done === count) {
+                            finalCB(null);
+                        }
+                    } else {
+                        finalCB(err);
+                    }
+                });
             }
         } else {
-	    // No changed entries.  Store tree.
-	    // FIXME: A weird case.  Could happen if two trees with
-	    // the same entries are hashed differently, e.g. because
-	    // of JSON formatting differences.
-            treeCB(true);
+            asynchronously(function() { finalCB(null); });
         }
+
+        // This callback gets called after all child entries have been
+        // synced, and stores the tree in the destination store.  This
+        // ensures the invariant that a tree only gets stored after
+        // all its entries have been stored.
+        function finalCB(err) {
+            if (!err) {
+                dst.put(hash(srcTree), content(srcTree), cb);
+            } else {
+                cb("Failed to sync tree " + hash(srcTree));
+            }
+        }
+
     }
 
-    /** Returns a callback function that OKs the given callback after
-        it has been called count times. */
-    function multiCallback(count, cb) {
-        if (count <= 0)
-            throw("Count must be greater than zero.");
-        var called = 0;
-        var multiCB = function(ok, res) {
-            if (ok) {
-                called++;
-                if (called === count) {
-                    cb(ok);
-                }
-            } else {
-                cb(false, res);
-            }
-        };
-        return multiCB;
+    /** Calls a function asynchronously, i.e. not on the stack.  Note
+        that the function's "this" will be the global object or
+        similar. */
+    function asynchronously(fun) {
+        setTimeout(fun, 1);
     }
 
     /*
@@ -308,6 +344,7 @@ var lol = (function() {
     return {
         "Blob": Blob,
         "LocalStore": LocalStore,
+        "LoggingStore": LoggingStore,
         "RemoteStore": RemoteStore,
         "Tree": Tree,
         "content": content,

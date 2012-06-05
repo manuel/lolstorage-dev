@@ -1,21 +1,21 @@
-function consoleCB(ok, res) {
-    if (ok) {
+function consoleCB(err, res) {
+    if (!err) {
         console.log("OK");
         if (res !== undefined)
             console.log(res);
     } else {
-        console.error("Error: " + res);
+        console.error("Error: " + err);
     }
 }
 
-var s1 = new lol.LocalStore("s1");
-var s2 = new lol.LocalStore("s2");
+var s1 = new lol.LoggingStore(new lol.LocalStore("s1"));
+var s2 = new lol.LoggingStore(new lol.LocalStore("s2"));
 
 var file1 = new lol.Blob("Hello world!");
-var file2 = new lol.Blob("Cruel2");
+var file2 = new lol.Blob("Buy milk.");
 
 var subTree = new lol.Tree({ "hello-world.txt": lol.hash(file1),
-                             "cruelty.txt": lol.hash(file2) });
+                             "todo.txt": lol.hash(file2) });
 var tree = new lol.Tree({ "sub-tree": lol.hash(subTree) });
 
 s1.put(lol.hash(file1), lol.content(file1), consoleCB);
