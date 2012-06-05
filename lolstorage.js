@@ -126,6 +126,10 @@ var lol = (function() {
         this.wrapped.put(key, value, cb);
     }
 
+    LoggingStore.prototype.toString = function() {
+        return this.wrapped.toString();
+    }
+
     /*
       OBJECTS
       ------------------------------------------------------------------
@@ -363,7 +367,7 @@ var lol = (function() {
 
     Blob.prototype.fsck = function(store, h, cb) {
         if (h !== hash(this)) {
-            cb("Incorrect hash " + h + " for object " + this);
+            cb("Incorrect hash " + h + " in store " + store);
         } else {
             cb(null);
         }
@@ -371,7 +375,7 @@ var lol = (function() {
 
     Tree.prototype.fsck = function(store, h, cb) {
         if (h !== hash(this)) {
-            cb("Incorrect hash " + h + " for tree " + this);
+            cb("Incorrect hash " + h + " in store " + store);
         } else {
             var count = Object.keys(this.lol_entries).length;
             if (count > 0) {
