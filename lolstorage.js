@@ -185,8 +185,13 @@ var lol = (function() {
         }
     }
 
-    Blob.prototype.toString = content;
-    Tree.prototype.toString = content;
+    Blob.prototype.toString = function() {
+        return content(this);
+    }
+
+    Tree.prototype.toString = function() {
+        return content(this);
+    }
     
     /*
       SYNCHRONIZATION
